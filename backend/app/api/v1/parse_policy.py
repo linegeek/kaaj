@@ -117,7 +117,7 @@ async def upload_and_parse(file: UploadFile = File(...)):
         client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
         message = client.messages.create(
             model="claude-opus-4-7",
-            max_tokens=4096,
+            max_tokens=8192,
             messages=[
                 {
                     "role": "user",

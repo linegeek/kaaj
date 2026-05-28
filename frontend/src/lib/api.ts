@@ -1,6 +1,6 @@
 import axios from 'axios'
 import type {
-  Application, BusinessCreatePayload, BusinessCreditPayload, GuarantorCreatePayload,
+  Application, ApplicationSummary, BusinessCreatePayload, BusinessCreditPayload, GuarantorCreatePayload,
   LoanRequestPayload, PersonalGuarantor, BusinessCredit, LoanRequest,
   Lender, LenderDetail, LenderProgram, ProgramDetail, EligibilityRule,
   LenderCreatePayload, LenderUpdatePayload,
@@ -14,6 +14,9 @@ const http = axios.create({ baseURL: '/api/v1' })
 // ---- Applications -----------------------------------------------------------
 
 export const applicationsApi = {
+  list: () =>
+    http.get<ApplicationSummary[]>('/applications').then(r => r.data),
+
   create: (data: BusinessCreatePayload) =>
     http.post<Application>('/applications', data).then(r => r.data),
 

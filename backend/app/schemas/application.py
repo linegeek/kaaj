@@ -81,3 +81,15 @@ class ApplicationResponse(BaseModel):
     guarantors: list[GuarantorResponse] = []
     business_credit: BusinessCreditResponse | None = None
     loan_request: LoanRequestResponse | None = None
+
+
+class ApplicationSummary(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    status: str
+    created_at: datetime
+    updated_at: datetime
+    business_name: str | None = None
+    owner_name: str | None = None
+    requested_amount: float | None = None
+    equipment_type: str | None = None

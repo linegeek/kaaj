@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import {
   HomeIcon,
+  DocumentTextIcon,
   PlusCircleIcon,
   BuildingLibraryIcon,
 } from '@heroicons/react/24/outline'
@@ -8,6 +9,7 @@ import clsx from 'clsx'
 
 const nav = [
   { to: '/', label: 'Dashboard', icon: HomeIcon, end: true },
+  { to: '/applications', label: 'Applications', icon: DocumentTextIcon, end: false },
   { to: '/applications/new', label: 'New Application', icon: PlusCircleIcon, end: false },
   { to: '/lenders', label: 'Lenders', icon: BuildingLibraryIcon, end: false },
 ]

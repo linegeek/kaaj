@@ -107,6 +107,17 @@ export interface Application {
   loan_request: LoanRequest | null
 }
 
+export interface ApplicationSummary {
+  id: string
+  status: string
+  created_at: string
+  updated_at: string
+  business_name: string | null
+  owner_name: string | null
+  requested_amount: number | null
+  equipment_type: string | null
+}
+
 // ---- Underwriting -----------------------------------------------------------
 
 export interface CriteriaCheck {

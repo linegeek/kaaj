@@ -6,7 +6,15 @@ import type {
 } from '@/types'
 
 export const applicationKeys = {
+  all: ['applications'] as const,
   detail: (id: string) => ['applications', id] as const,
+}
+
+export function useApplicationsList() {
+  return useQuery({
+    queryKey: applicationKeys.all,
+    queryFn: () => applicationsApi.list(),
+  })
 }
 
 export function useApplication(id: string) {

@@ -16,18 +16,23 @@ dependencies = [
     "pydantic-settings==2.6.1",
     "python-multipart==0.0.12",
     "httpx==0.28.1",
-    "hatchet-sdk==0.40.0",
     "anthropic==0.40.0",
     "pdfplumber==0.11.4",
     "python-dotenv==1.0.1",
 ]
 
 [project.optional-dependencies]
+hatchet = [
+    "hatchet-sdk>=0.47.1",
+]
 dev = [
     "pytest==8.3.4",
     "pytest-asyncio==0.24.0",
     "pytest-cov==6.0.0",
 ]
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

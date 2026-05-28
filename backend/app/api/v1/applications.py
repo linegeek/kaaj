@@ -12,7 +12,7 @@ from app.models.application import (
     Application, Business, BusinessCredit, LoanRequest, PersonalGuarantor,
 )
 from app.schemas.application import (
-    ApplicationResponse, BusinessCreate, BusinessCreditCreate,
+    ApplicationResponse, ApplicationSummary, BusinessCreate, BusinessCreditCreate,
     GuarantorCreate, GuarantorResponse, LoanRequestCreate,
     BusinessCreditResponse, LoanRequestResponse,
 )
@@ -41,6 +41,33 @@ def _derive_equipment_age(loan_request: LoanRequest) -> None:
     if loan_request.equipment_age_yrs is None and loan_request.equipment_year:
         current_year = datetime.now(timezone.utc).year
         loan_request.equipment_age_yrs = float(current_year - loan_request.equipment_year)
+
+
+@router.get("", response_model=list[ApplicationSummary])
+async def list_applications(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(Application)
+        .options(
+            selectinload(Application.business),
+            selectinload(Application.loan_request),
+        )
+        .order_by(Application.created_at.desc())
+    )
+    applications = result.scalars().all()
+
+    summaries = []
+    for app in applications:
+        summaries.append(ApplicationSummary(
+            id=app.id,
+            status=app.status,
+            created_at=app.created_at,
+            updated_at=app.updated_at,
+            business_name=app.business.business_name if app.business else None,
+            owner_name=app.business.owner_name if app.business else None,
+            requested_amount=app.loan_request.requested_amount if app.loan_request else None,
+            equipment_type=app.loan_request.equipment_type if app.loan_request else None,
+        ))
+    return summaries
 
 
 @router.post("", response_model=ApplicationResponse, status_code=status.HTTP_201_CREATED)
