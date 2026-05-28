@@ -1,0 +1,185 @@
+version: "3.8"
+
+# Shared Hatchet environment variables reused across services
+x-hatchet-common: &hatchet-common
+  DATABASE_URL: "postgresql://hatchet:hatchet@postgres:5432/hatchet?sslmode=disable"
+  SERVER_TASKQUEUE_RABBITMQ_URL: "amqp://hatchet:hatchet@rabbitmq:5672/"
+  SERVER_AUTH_COOKIE_SECRETS: "supersecretsecret1 supersecretsecret2"
+  SERVER_AUTH_COOKIE_DOMAIN: "localhost"
+  SERVER_AUTH_COOKIE_INSECURE: "t"
+  SERVER_GRPC_BIND_ADDRESS: "0.0.0.0"
+  SERVER_GRPC_BROADCAST_ADDRESS: "hatchet-engine:7077"
+  SERVER_GRPC_PORT: "7077"
+  SERVER_URL: "http://hatchet-api:8080"
+
+volumes:
+  postgres_data:
+  hatchet_certs:
+  hatchet_config:
+
+services:
+  # ---------------------------------------------------------------------------
+  # Infrastructure
+  # ---------------------------------------------------------------------------
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: kaaj
+      POSTGRES_PASSWORD: kaaj
+      POSTGRES_DB: kaaj
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/10-hatchet.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kaaj"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: hatchet
+      RABBITMQ_DEFAULT_PASS: hatchet
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ---------------------------------------------------------------------------
+  # Hatchet
+  # ---------------------------------------------------------------------------
+
+  hatchet-migration:
+    image: ghcr.io/hatchet-dev/hatchet/hatchet-migrate:latest
+    restart: "no"
+    environment:
+      <<: *hatchet-common
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  hatchet-api:
+    image: ghcr.io/hatchet-dev/hatchet/hatchet-api:latest
+    restart: unless-stopped
+    environment:
+      <<: *hatchet-common
+    volumes:
+      - hatchet_certs:/hatchet/certs
+      - hatchet_config:/hatchet/config
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      hatchet-migration:
+        condition: service_completed_successfully
+
+  hatchet-engine:
+    image: ghcr.io/hatchet-dev/hatchet/hatchet-engine:latest
+    restart: unless-stopped
+    environment:
+      <<: *hatchet-common
+    volumes:
+      - hatchet_certs:/hatchet/certs
+      - hatchet_config:/hatchet/config
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      hatchet-api:
+        condition: service_started
+
+  hatchet-setup-config:
+    image: ghcr.io/hatchet-dev/hatchet/hatchet-admin:latest
+    restart: "no"
+    environment:
+      <<: *hatchet-common
+    volumes:
+      - hatchet_certs:/hatchet/certs
+      - hatchet_config:/hatchet/config
+    command: >
+      /hatchet/hatchet-admin quickstart
+      --skip if-exists
+      --generated-config-dir /hatchet/config
+      --overwrite=false
+    depends_on:
+      hatchet-api:
+        condition: service_started
+      hatchet-engine:
+        condition: service_started
+
+  # ---------------------------------------------------------------------------
+  # Application
+  # ---------------------------------------------------------------------------
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: "postgresql+asyncpg://kaaj:kaaj@postgres:5432/kaaj"
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY}"
+      DEBUG: "${DEBUG:-false}"
+    env_file:
+      - .env
+    volumes:
+      # Token written by hatchet-setup-config is read at startup
+      - hatchet_config:/hatchet/config:ro
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      hatchet-setup-config:
+        condition: service_completed_successfully
+    command: >
+      sh -c "
+        alembic upgrade head &&
+        python -m seed_data.seed &&
+        uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+      "
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: "postgresql+asyncpg://kaaj:kaaj@postgres:5432/kaaj"
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY}"
+      DEBUG: "${DEBUG:-false}"
+    env_file:
+      - .env
+    volumes:
+      - hatchet_config:/hatchet/config:ro
+    depends_on:
+      backend:
+        condition: service_started
+      hatchet-engine:
+        condition: service_started
+    command: python -m app.workflows.worker
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
